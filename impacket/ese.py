@@ -22,7 +22,6 @@
 # [ ] Parse multi-values properly
 # [ ] Support long values properly
 
-from impacket import LOG
 try:
     from collections import OrderedDict
 except:
@@ -33,6 +32,16 @@ except:
 from impacket.structure import Structure
 from struct import unpack
 from binascii import hexlify
+
+import sys
+import logging
+
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.INFO)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+LOG.addHandler(handler)
 
 # Constants
 
@@ -726,7 +735,7 @@ class ESENT_DB:
         data = self.__DB.read(self.__pageSize)
         while len(data) != 0  and len(data) < self.__pageSize:
            remaining = self.__pageSize - len(data)
-            data += self.__DB.read(remaining)
+           data += self.__DB.read(remaining)
         # Special case for the first page
         if pageNum <= 0:
             return data

@@ -8,6 +8,9 @@ from examples.secretsdump import NTDSHashes
 import re
 import codecs
 import locale
+import logging
+
+from ese import LOG
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=False, description="crack-dit makes it easier to perform password "
@@ -24,10 +27,10 @@ if __name__ == "__main__":
     try:
         ntdshashes = NTDSHashes(args.ntds)
     except Exception as e:
-        print(e)
+        LOG.error(e)
         sys.exit(1)
     
-    print('Here')
+    LOG.info("Start of parsing of the NTDS.DIT")
     myFile = open(args.out, 'w')
     with myFile:
         myFields = ['name', 'sam_account_name','guid']
@@ -43,5 +46,5 @@ if __name__ == "__main__":
             data.append(displayname.strip().encode("utf-8"))
             data.append(samaccountname.strip().encode("utf-8"))
             data.append(objectguid.strip().encode("utf-8"))
-            print(data)
+            LOG.info(data)
             writer.writerow(data)

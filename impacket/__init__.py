@@ -21,5 +21,5 @@ except ImportError:
 # with the logger output. By default it is forwarded to the 
 # upstream logger
 
-LOG = logging.getLogger(__name__)
-LOG.addHandler(NullHandler())
+#LOG = logging.getLogger(__name__)
+#LOG.addHandler(NullHandler())
