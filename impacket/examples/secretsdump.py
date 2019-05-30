@@ -45,7 +45,8 @@
 import logging
 import string
 
-from ese import ESENT_DB
+from impacket import LOG
+from impacket.ese import ESENT_DB
 
 class NTDSHashes:
     class SECRET_TYPE:

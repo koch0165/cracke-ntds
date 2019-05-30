@@ -22,6 +22,7 @@
 # [ ] Parse multi-values properly
 # [ ] Support long values properly
 
+from impacket import LOG
 try:
     from collections import OrderedDict
 except:
@@ -29,7 +30,7 @@ except:
         from ordereddict.ordereddict import OrderedDict
     except:
         from ordereddict import OrderedDict
-from structure import Structure
+from impacket.structure import Structure
 from struct import unpack
 from binascii import hexlify
 
@@ -413,8 +414,10 @@ class ESENT_CATALOG_DATA_DEFINITION_ENTRY(Structure):
         elif dataType == CATALOG_TYPE_LONG_VALUE:
             self.structure += self.other + self.lv_stuff
         elif dataType == CATALOG_TYPE_CALLBACK:
+            LOG.error('CallBack types not supported!')
             raise
         else:
+            LOG.error('Unknown catalog type 0x%x' % dataType)
             self.structure = ()
             Structure.__init__(self,data)
 
@@ -550,6 +553,7 @@ class ESENT_PAGE:
                     #indexEntry.dump()
                 elif self.record['PageFlags'] & FLAGS_LONG_VALUE > 0:
                     # Long Page Value
+                    LOG.error('Long value still not supported')
                     raise
                 else:
                     # Table Value
@@ -562,6 +566,7 @@ class ESENT_PAGE:
 
     def getTag(self, tagNum):
         if self.record['FirstAvailablePageTag'] < tagNum:
+            LOG.error('Trying to grab an unknown tag 0x%x' % tagNum)
             raise
 
         tags = self.data[-4*self.record['FirstAvailablePageTag']:]
@@ -600,6 +605,7 @@ class ESENT_DB:
         self.mountDB()
 
     def mountDB(self):
+        LOG.debug("Mounting DB...")
         if self.__isRemote is True:
             self.__DB = self.__fileName
             self.__DB.open()
@@ -612,6 +618,9 @@ class ESENT_DB:
         self.__pageSize = self.__DBHeader['PageSize']
         self.__DB.seek(0,2)
         self.__totalPages = (self.__DB.tell() / self.__pageSize) -2
+        LOG.debug("Database Version:0x%x, Revision:0x%x"% (self.__DBHeader['Version'], self.__DBHeader['FileFormatRevision']))
+        LOG.debug("Page Size: %d" % self.__pageSize)
+        LOG.debug("Total Pages in file: %d" % self.__totalPages)
         self.parseCatalog(CATALOG_PAGE_NUMBER)
 
     def printCatalog(self):
@@ -654,6 +663,7 @@ class ESENT_DB:
         elif catalogEntry['Type'] == CATALOG_TYPE_LONG_VALUE:
             self.__addLongValue(entry)
         else:
+            LOG.error('Unknown type 0x%x' % catalogEntry['Type'])
             raise
 
     def __parseItemName(self,entry):
@@ -706,12 +716,17 @@ class ESENT_DB:
                 branchEntry = ESENT_BRANCH_ENTRY(flags, data)
                 self.parseCatalog(branchEntry['ChildPageNumber'])
 
+
+    def readHeader(self):
+        LOG.debug("Reading Boot Sector for %s" % self.__volumeName)
+
     def getPage(self, pageNum):
+        LOG.debug("Trying to fetch page %d (0x%x)" % (pageNum, (pageNum+1)*self.__pageSize))
         self.__DB.seek((pageNum+1)*self.__pageSize, 0)
         data = self.__DB.read(self.__pageSize)
-        while len(data) != 0 and len(data) < self.__pageSize:
+        while len(data) != 0  and len(data) < self.__pageSize:
            remaining = self.__pageSize - len(data)
-           data += self.__DB.read(remaining)
+            data += self.__DB.read(remaining)
         # Special case for the first page
         if pageNum <= 0:
             return data
@@ -921,9 +936,11 @@ class ESENT_DB:
 
                     #print "ID: %d, itemFlag: 0x%x" %( columnRecord['Identifier'], itemFlag)
                     if itemFlag & (TAGGED_DATA_TYPE_COMPRESSED ):
+                        LOG.error('Unsupported tag column: %s, flag:0x%x' % (column, itemFlag))
                         record[column] = None
                     elif itemFlag & TAGGED_DATA_TYPE_MULTI_VALUE:
                         # ToDo: Parse multi-values properly
+                        LOG.debug('Multivalue detected in column %s, returning raw results' % (column))
                         record[column] = (hexlify(tag[offsetItem:][:itemSize]),)
                     else:
                         record[column] = tag[offsetItem:][:itemSize]
@@ -942,6 +959,7 @@ class ESENT_DB:
                 # Let's handle strings
                 if record[column] is not None:
                     if columnRecord['CodePage'] not in StringCodePages:
+                        LOG.error('Unknown codepage 0x%x'% columnRecord['CodePage'])
                         raise
                     stringDecoder = StringCodePages[columnRecord['CodePage']]
 

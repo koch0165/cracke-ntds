@@ -27,7 +27,7 @@ if __name__ == "__main__":
         print(e)
         sys.exit(1)
     
-    print('Start of parsing of the NTDS.DIT file')    
+    print('Here')
     myFile = open(args.out, 'w')
     with myFile:
         myFields = ['name', 'sam_account_name','guid']
