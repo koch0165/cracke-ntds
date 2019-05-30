@@ -613,7 +613,7 @@ class ESENT_DB:
             self.__DB = open(self.__fileName,"rb")
         mainHeader = self.getPage(-1)
         if len(mainHeader) == 0:
-            raise Exception("File is of size 0 bytes.")
+            raise Exception("File size is 0 bytes. Cannot parse this file")
         self.__DBHeader = ESENT_DB_HEADER(mainHeader)
         self.__pageSize = self.__DBHeader['PageSize']
         self.__DB.seek(0,2)
@@ -725,7 +725,7 @@ class ESENT_DB:
         self.__DB.seek((pageNum+1)*self.__pageSize, 0)
         data = self.__DB.read(self.__pageSize)
         while len(data) != 0  and len(data) < self.__pageSize:
-            remaining = self.__pageSize - len(data)
+           remaining = self.__pageSize - len(data)
             data += self.__DB.read(remaining)
         # Special case for the first page
         if pageNum <= 0:
