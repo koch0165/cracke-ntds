@@ -45,8 +45,8 @@
 import logging
 import string
 
-from impacket import LOG
-from impacket.ese import ESENT_DB
+from ese import ESENT_DB
+from ese import LOG
 
 class NTDSHashes:
     class SECRET_TYPE:
@@ -92,6 +92,7 @@ class NTDSHashes:
                 self.__ESEDB = ESENT_DB(ntdsFile, isRemote = isRemote)
                 self.__cursor = self.__ESEDB.openTable('datatable')
         except Exception as e:
+            LOG.error('Error opening the file')
             raise e
             
     def getNextRecord(self):
@@ -122,7 +123,8 @@ class NTDSHashes:
             else:
                 return None, True
         except Exception as e:
-            raise Exception('NextRecordFetchFailed')
+            LOG.error(e)            
+            raise Exception('Fetching of next record failed')
 
     def finish(self):
         if self.__NTDS is not None:
