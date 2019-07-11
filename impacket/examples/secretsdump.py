@@ -44,6 +44,7 @@
 #
 import logging
 import string
+from collections import defaultdict
 
 from ese import ESENT_DB
 from ese import LOG
@@ -75,18 +76,60 @@ class NTDSHashes:
         'pekList':'ATTk590689',
         'supplementalCredentials':'ATTk589949',
         'pwdLastSet':'ATTq589920',
+        'distinguishedName':'DN', #The DN is custom tag.
+        'displayName':'ATTm589825' #This is the name used as part of distinguished name.
     }
 
     INTERNAL_TO_NAME = dict((v,k) for k,v in NAME_TO_INTERNAL.iteritems())
 
     SAM_NORMAL_USER_ACCOUNT = 0x30000000
-    SAM_MACHINE_ACCOUNT     = 0x30000001
+    SAM_USER_OBJECT         = 0x30000000
     SAM_TRUST_ACCOUNT       = 0x30000002
+    SAM_MACHINE_ACCOUNT     = 0x30000001
+    SAM_GROUP_OBJECT        = 0x10000000
+    SAM_NON_SECURITY_GROUP_OBJECT = 0x10000001
+    SAM_ALIAS_OBJECT        = 0x20000000
+    SAM_NON_SECURITY_ALIAS_OBJECT = 0x20000001
 
-    ACCOUNT_TYPES = ( SAM_NORMAL_USER_ACCOUNT, SAM_MACHINE_ACCOUNT, SAM_TRUST_ACCOUNT)
+    SAM_ACCOUNT_TYPE_TO_OBJECT_CLASS = {
+        SAM_NORMAL_USER_ACCOUNT:'user',
+        SAM_USER_OBJECT:'user',
+        SAM_TRUST_ACCOUNT:'user',
+        SAM_MACHINE_ACCOUNT:'computer',
+        SAM_GROUP_OBJECT:'group',
+        SAM_NON_SECURITY_GROUP_OBJECT:'group',
+        SAM_ALIAS_OBJECT:'group',
+        SAM_NON_SECURITY_ALIAS_OBJECT:'group',
+    }
+  
+    FLAG_TO_SAM_ACCOUNT_TYPES = {
+        1:SAM_NORMAL_USER_ACCOUNT,
+        2:SAM_USER_OBJECT,
+        4:SAM_TRUST_ACCOUNT,
+        8:SAM_MACHINE_ACCOUNT,
+        16:SAM_GROUP_OBJECT,
+        32:SAM_NON_SECURITY_GROUP_OBJECT,
+        64:SAM_ALIAS_OBJECT,
+        128:SAM_NON_SECURITY_ALIAS_OBJECT,
+    }
+
+    #ACCOUNT_TYPES = ( SAM_NORMAL_USER_ACCOUNT, SAM_MACHINE_ACCOUNT, SAM_TRUST_ACCOUNT, SAM_GROUP_OBJECT, SAM_NON_SECURITY_GROUP_OBJECT)
    
-    def __init__(self, ntdsFile, isRemote=False):
+    def __init__(self, ntdsFile, samAccountTypes, isRemote=False):
         self.__NTDS = ntdsFile
+        self.__ACCOUNT_TYPES = set()
+        flagVal = 1
+        bitFlag = 1
+        samAccountTypes = int(samAccountTypes)
+
+        while samAccountTypes > 0:
+            if samAccountTypes & bitFlag > 0:
+                self.__ACCOUNT_TYPES.add(self.FLAG_TO_SAM_ACCOUNT_TYPES[flagVal])
+                # Rightshift the orFlags by 1 to check every bit to add the
+                # corresponding flagVal to Account types if the bit is set.
+            samAccountTypes >>= 1
+            flagVal *= 2
+
         try:
             if self.__NTDS is not None:
                 self.__ESEDB = ESENT_DB(ntdsFile, isRemote = isRemote)
@@ -97,32 +140,41 @@ class NTDSHashes:
             
     def getNextRecord(self):
         record = self.__ESEDB.getNextRow(self.__cursor)
+        LOG.info(record)
         if record is None:
             return None, False
-        elif self.NAME_TO_INTERNAL['sAMAccountType'] not in record:
+        attributeMap = defaultdict(str)
+        if self.NAME_TO_INTERNAL['sAMAccountType'] not in record:
             raise Exception('InvalidFile')
         try:
-            if record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.ACCOUNT_TYPES:
+            if record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.__ACCOUNT_TYPES:
                 if record[self.NAME_TO_INTERNAL['sAMAccountName']] is not None:
-                    userName = '%s' % record[self.NAME_TO_INTERNAL['sAMAccountName']]
+                    samAccountName = '%s' % record[self.NAME_TO_INTERNAL['sAMAccountName']]
+                    attributeMap['samAccountName'] = samAccountName
                 else:
-                    userName = 'N/A'
                     return None, True
-                if record[self.NAME_TO_INTERNAL['name']] is not None:
-                    displayName = '%s' % record[self.NAME_TO_INTERNAL['name']]
+                if record[self.NAME_TO_INTERNAL['displayName']] is not None:
+                    displayName = '%s' % record[self.NAME_TO_INTERNAL['displayName']]
+                    attributeMap['name'] = displayName
                 else:
-                    displayName = 'N/A'
                     return None, True
                 if record[self.NAME_TO_INTERNAL['objectGUID']] is not None:
                     objectGuid = '%s' % record[self.NAME_TO_INTERNAL['objectGUID']]
+                    attributeMap['guid'] = objectGuid
                 else:
-                    objectGuid = 'N/A'
                     return None, True
-                fields = "%s:%s:%s" % (displayName, userName, objectGuid)
-                return fields, True
+                if record[self.NAME_TO_INTERNAL['distinguishedName']] is not None:
+                    distinguishedName = '%s' % record[self.NAME_TO_INTERNAL['distinguishedName']]
+                    attributeMap['dnName'] = distinguishedName
+                else:
+                    return None, True
+                objectType = self.SAM_ACCOUNT_TYPE_TO_OBJECT_CLASS[record[self.NAME_TO_INTERNAL['sAMAccountType']]]
+                attributeMap['objectType'] = objectType
+                return attributeMap, True
             else:
                 return None, True
         except Exception as e:
+            print(e)
             LOG.error(e)            
             raise Exception('Fetching of next record failed')
 

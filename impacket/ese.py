@@ -29,19 +29,35 @@ except:
         from ordereddict.ordereddict import OrderedDict
     except:
         from ordereddict import OrderedDict
-from impacket.structure import Structure
+from collections import defaultdict
+from structure import Structure
 from struct import unpack
 from binascii import hexlify
+from binascii import b2a_uu
 
 import sys
 import logging
 
+ASCII_TIME_FORMAT = "%m%d %H:%M:%S"         # mmdd hh:mm:ss.uuuuuu
+LINE_FORMAT = ("%(levelname).1s"            # [DIWEF]
+               "%(asctime)s.%(msecs)s "     # ASCII_TIME_FORMAT
+               "%(threadName)s "            # threadid
+               "%(pathname)s:%(lineno)d] "  # file:line]
+               "%(message)s")
+
+logging.Formatter(fmt=LINE_FORMAT, datefmt=ASCII_TIME_FORMAT)
 LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.INFO)
 
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.INFO)
-LOG.addHandler(handler)
+errorhandler = logging.FileHandler('/home/cohesity/logs/yoda_exec.ERROR')
+errorhandler.setLevel(logging.ERROR)
+errorhandler.setFormatter(logging.Formatter(fmt=LINE_FORMAT, datefmt=ASCII_TIME_FORMAT))
+LOG.addHandler(errorhandler)
+
+infohandler = logging.FileHandler('/home/cohesity/logs/yoda_exec.INFO')
+infohandler.setLevel(logging.INFO)
+infohandler.setFormatter(logging.Formatter(fmt=LINE_FORMAT, datefmt=ASCII_TIME_FORMAT))
+LOG.addHandler(infohandler)
 
 # Constants
 
@@ -611,6 +627,7 @@ class ESENT_DB:
         self.__tables = OrderedDict()
         self.__currentTable = None
         self.__isRemote = isRemote
+        self.__DNMap = defaultdict(str)
         self.mountDB()
 
     def mountDB(self):
@@ -735,7 +752,10 @@ class ESENT_DB:
         data = self.__DB.read(self.__pageSize)
         while len(data) != 0  and len(data) < self.__pageSize:
            remaining = self.__pageSize - len(data)
-           data += self.__DB.read(remaining)
+           tempdata = self.__DB.read(remaining)
+           if len(tempdata) == 0:
+               break
+           data += tempdata
         # Special case for the first page
         if pageNum <= 0:
             return data
@@ -861,15 +881,18 @@ class ESENT_DB:
         prevItemLen = 0
         tagLen = len(tag)
         fixedSizeOffset = len(dataDefinitionHeader)
-        variableSizeOffset = dataDefinitionHeader['VariableSizeOffset'] 
- 
+        variableSizeOffset = dataDefinitionHeader['VariableSizeOffset']
+        name = str('') 
+        dntId = long(0)
+        pdntId = long(0)
+        rdnTypeId = long(0)
+               
         columns = cursor['TableData']['Columns'] 
-        
         for column in columns.keys():
-            if column != 'ATTk589826' and column != 'ATTm590045' and column != 'ATTm3' and column != 'ATTj590126':
+            if column != 'ATTk589826' and column != 'ATTm590045' and column != 'ATTm3' and column != 'ATTj590126' and column != 'DNT_col' and column != 'PDNT_col' and column != 'ATTm589825' and column != 'RDNtyp_col':
                 continue
-              
             columnRecord = columns[column]['Record']
+
             #columnRecord.dump()
             if columnRecord['Identifier'] <= dataDefinitionHeader['LastFixedSize']:
                 # Fixed Size column data type, still available data
@@ -888,7 +911,6 @@ class ESENT_DB:
                 else:
                     itemValue = tag[variableSizeOffset+variableDataBytesProcessed:][:itemLen-prevItemLen]
                     record[column] = itemValue
-
                 #if columnRecord['Identifier'] <= dataDefinitionHeader['LastVariableDataType']:
                 variableDataBytesProcessed +=itemLen-prevItemLen
 
@@ -964,6 +986,7 @@ class ESENT_DB:
             if type(record[column]) is tuple:
                 # A multi value data, we won't decode it, just leave it this way
                 record[column] = record[column][0]
+
             elif columnRecord['ColumnType'] == JET_coltypText or columnRecord['ColumnType'] == JET_coltypLongText: 
                 # Let's handle strings
                 if record[column] is not None:
@@ -983,7 +1006,36 @@ class ESENT_DB:
                         unpackStr = unpackData[1]
                         unpackSize = unpackData[0]
                         record[column] = unpack(unpackStr, record[column])[0]
+                        if column == 'RDNtyp_col':
+                            record[column] = record[column] >> 8
+            
+            if column == 'DNT_col':
+                dntId = record[column]
+            elif column == 'PDNT_col':
+                pdntId = record[column]
+            elif column == 'RDNtyp_col':
+                rdnTypeId = record[column]
+            elif column  == 'ATTm589825':
+                name = record[column]
 
+        #DNT ID = 1 , 2 are reserved for the $ROOT_OBJECT$ and $NOT_AN_OBJECT$.
+        #DNT ID = 0 is assigned at initialization.
+        #RDNTyp_col = 3 indicates it is CN.
+        #RDNTyp_col = 11 indicates it is OU.
+        #RDNTyp_col = 1376281 indicates it is DC.
+        # ATTj590126 is key for samAccountType in the record.
+        if not(dntId == 0 or dntId == 1 or dntId == 2):
+            if rdnTypeId == 3 and name != "" and pdntId != 0 and  self.__DNMap[pdntId] is not None:
+                if record['ATTj590126'] is None:
+                    self.__DNMap[dntId] = "CN="+name + "," + self.__DNMap[pdntId]
+                else:
+                    record['DN'] = "CN="+name + "," + self.__DNMap[pdntId]
+            elif rdnTypeId == 11 and name != ""  and pdntId !=0 and self.__DNMap[pdntId] is not None:
+                self.__DNMap[dntId] = "OU="+name+","+self.__DNMap[pdntId]
+            elif rdnTypeId == 1376281 and name != "" and pdntId != 2:
+                self.__DNMap[dntId] = "DC="+name+","+self.__DNMap[pdntId]
+            elif rdnTypeId == 1376281 and name != "" and pdntId == 2:   
+                self.__DNMap[dntId] = "DC="+name     
         return record
 
 

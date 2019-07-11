@@ -21,19 +21,21 @@ if __name__ == "__main__":
                                                               "within your favourite password cracker")
     group.add_argument("--ntds", action="store", help="(local) ntds.dit file to parse")
     group.add_argument("--out", action="store", help="File to write user:hash to")
+    group.add_argument("--samaccounttypes", action="store", help="Sam Account types that need to be parsed. This is a bit flag")
     args, unknown_args = parser.parse_known_args()
     sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout) 
 
     try:
-        ntdshashes = NTDSHashes(args.ntds)
+        ntdshashes = NTDSHashes(args.ntds,args.samaccounttypes)
     except Exception as e:
         LOG.error(e)
         sys.exit(1)
     
     LOG.info("Start of parsing of the NTDS.DIT")
+    numObjects = 0
     myFile = open(args.out, 'w')
     with myFile:
-        myFields = ['name', 'sam_account_name','guid']
+        myFields = ['name', 'sam_account_name','distinguished_name','object_type','guid']
         writer = csv.writer(myFile)
         while True:
             record, hasNextRecord = ntdshashes.getNextRecord()
@@ -41,10 +43,18 @@ if __name__ == "__main__":
                 break
             if record is None:
                 continue
-            displayname, samaccountname, objectguid  = re.findall("(?P<displayname>.*):(?P<user>.*):(?P<objectguid>.*)", record)[0]
             data = []
-            data.append(displayname.strip().encode("utf-8"))
-            data.append(samaccountname.strip().encode("utf-8"))
-            data.append(objectguid.strip().encode("utf-8"))
-            LOG.info(data)
+            data.append(record['name'].strip().encode("utf-8"))
+            data.append(record['samAccountName'].strip().encode("utf-8"))
+            data.append(record['dnName'].strip().encode("utf-8"))
+            data.append(record['objectType'].strip().encode('utf-8'))
+            data.append(record['guid'].strip().encode("utf-8"))
+            LOG.debug(data)
             writer.writerow(data)
+            numObjects = numObjects + 1
+
+    LOG.info('The number of objects present in the NTDS.DIT are %d ', numObjects)
+    if numObjects == 0:
+        LOG.error('The NTDS.DIT file has no AD objects.')
+        sys.exit(1)
+    LOG.info("Parsing of the NTDS.DIT is completed")
