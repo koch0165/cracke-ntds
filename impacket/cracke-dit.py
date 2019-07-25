@@ -26,7 +26,7 @@ if __name__ == "__main__":
     sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout) 
 
     try:
-        ntdshashes = NTDSHashes(args.ntds,args.samaccounttypes)
+        ntdshashes = NTDSHashes(args.ntds, args.samaccounttypes)
     except Exception as e:
         LOG.error(e)
         sys.exit(1)
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     numObjects = 0
     myFile = open(args.out, 'w')
     with myFile:
-        myFields = ['name', 'sam_account_name','distinguished_name','object_type','guid']
+        myFields = ['name', 'sam_account_name', 'distinguished_name', 'object_type', 'guid']
         writer = csv.writer(myFile)
         while True:
             record, hasNextRecord = ntdshashes.getNextRecord()
@@ -44,15 +44,17 @@ if __name__ == "__main__":
             if record is None:
                 continue
             data = []
-            data.append(record['name'].strip().encode("utf-8"))
-            data.append(record['samAccountName'].strip().encode("utf-8"))
-            data.append(record['dnName'].strip().encode("utf-8"))
-            data.append(record['objectType'].strip().encode('utf-8'))
-            data.append(record['guid'].strip().encode("utf-8"))
-            LOG.debug(data)
-            writer.writerow(data)
-            numObjects = numObjects + 1
-
+            try:
+                data.append(record['name'].strip().encode("utf-8"))
+                data.append(record['samAccountName'].strip().encode("utf-8"))
+                data.append(record['dnName'].strip().encode("utf-8"))
+                data.append(record['objectType'].strip().encode('utf-8'))
+                data.append(record['guid'].strip().encode("utf-8"))
+                LOG.debug(data)
+                writer.writerow(data)
+                numObjects = numObjects + 1
+            except Exception as e:
+                LOG.error(e)   
     LOG.info('The number of objects present in the NTDS.DIT are %d ', numObjects)
     if numObjects == 0:
         LOG.error('The NTDS.DIT file has no AD objects.')

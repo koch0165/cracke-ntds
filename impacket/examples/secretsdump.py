@@ -102,7 +102,7 @@ class NTDSHashes:
         SAM_NON_SECURITY_ALIAS_OBJECT:'group',
     }
   
-    FLAG_TO_SAM_ACCOUNT_TYPES = {
+    FLAG_TO_ACCOUNT_TYPES = {
         1:SAM_NORMAL_USER_ACCOUNT,
         2:SAM_USER_OBJECT,
         4:SAM_TRUST_ACCOUNT,
@@ -112,19 +112,21 @@ class NTDSHashes:
         64:SAM_ALIAS_OBJECT,
         128:SAM_NON_SECURITY_ALIAS_OBJECT,
     }
-
-    #ACCOUNT_TYPES = ( SAM_NORMAL_USER_ACCOUNT, SAM_MACHINE_ACCOUNT, SAM_TRUST_ACCOUNT, SAM_GROUP_OBJECT, SAM_NON_SECURITY_GROUP_OBJECT)
    
     def __init__(self, ntdsFile, samAccountTypes, isRemote=False):
         self.__NTDS = ntdsFile
         self.__ACCOUNT_TYPES = set()
         flagVal = 1
         bitFlag = 1
+        self.__fetchOU = False
         samAccountTypes = int(samAccountTypes)
 
         while samAccountTypes > 0:
             if samAccountTypes & bitFlag > 0:
-                self.__ACCOUNT_TYPES.add(self.FLAG_TO_SAM_ACCOUNT_TYPES[flagVal])
+                if flagVal == 256:
+                    self.__fetchOU = True
+                else:
+                    self.__ACCOUNT_TYPES.add(self.FLAG_TO_ACCOUNT_TYPES[flagVal])
                 # Rightshift the orFlags by 1 to check every bit to add the
                 # corresponding flagVal to Account types if the bit is set.
             samAccountTypes >>= 1
@@ -137,22 +139,33 @@ class NTDSHashes:
         except Exception as e:
             LOG.error('Error opening the file')
             raise e
+
+    def isIndexableRecord(self, record):
+        if record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.__ACCOUNT_TYPES:
+            return True
+        elif self.NAME_TO_INTERNAL['distinguishedName'] not in record:
+            return False
+        elif self.__fetchOU and record[self.NAME_TO_INTERNAL['distinguishedName']] is not None:
+            distinguishedName = '%s' % record[self.NAME_TO_INTERNAL['distinguishedName']]
+            if distinguishedName.startswith('OU'):
+                return True
+        return False
             
     def getNextRecord(self):
         record = self.__ESEDB.getNextRow(self.__cursor)
-        LOG.info(record)
         if record is None:
             return None, False
         attributeMap = defaultdict(str)
         if self.NAME_TO_INTERNAL['sAMAccountType'] not in record:
             raise Exception('InvalidFile')
         try:
-            if record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.__ACCOUNT_TYPES:
+            if self.isIndexableRecord(record):
                 if record[self.NAME_TO_INTERNAL['sAMAccountName']] is not None:
                     samAccountName = '%s' % record[self.NAME_TO_INTERNAL['sAMAccountName']]
                     attributeMap['samAccountName'] = samAccountName
                 else:
-                    return None, True
+                    if not self.__fetchOU:
+                        return None, True
                 if record[self.NAME_TO_INTERNAL['displayName']] is not None:
                     displayName = '%s' % record[self.NAME_TO_INTERNAL['displayName']]
                     attributeMap['name'] = displayName
@@ -168,13 +181,16 @@ class NTDSHashes:
                     attributeMap['dnName'] = distinguishedName
                 else:
                     return None, True
-                objectType = self.SAM_ACCOUNT_TYPE_TO_OBJECT_CLASS[record[self.NAME_TO_INTERNAL['sAMAccountType']]]
+                if distinguishedName.startswith('OU'):
+                    objectType = 'ou'
+                else:
+                    objectType = self.SAM_ACCOUNT_TYPE_TO_OBJECT_CLASS[record[self.NAME_TO_INTERNAL['sAMAccountType']]]
                 attributeMap['objectType'] = objectType
                 return attributeMap, True
             else:
                 return None, True
         except Exception as e:
-            print(e)
+            LOG.error(record)
             LOG.error(e)            
             raise Exception('Fetching of next record failed')
 

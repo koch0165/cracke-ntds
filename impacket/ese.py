@@ -882,12 +882,17 @@ class ESENT_DB:
         tagLen = len(tag)
         fixedSizeOffset = len(dataDefinitionHeader)
         variableSizeOffset = dataDefinitionHeader['VariableSizeOffset']
+        # This stores the name of the AD object.
         name = str('') 
+        # This stores the distinguished name tag Id of the AD object.
         dntId = long(0)
+        # This stores the distiinguished name tag Id of the parent of the AD object.
         pdntId = long(0)
+        # This specifies whether it is DC, CN or OU while constructing the
+        # distinguished name.
         rdnTypeId = long(0)
                
-        columns = cursor['TableData']['Columns'] 
+        columns = cursor['TableData']['Columns']
         for column in columns.keys():
             if column != 'ATTk589826' and column != 'ATTm590045' and column != 'ATTm3' and column != 'ATTj590126' and column != 'DNT_col' and column != 'PDNT_col' and column != 'ATTm589825' and column != 'RDNtyp_col':
                 continue
@@ -1006,36 +1011,56 @@ class ESENT_DB:
                         unpackStr = unpackData[1]
                         unpackSize = unpackData[0]
                         record[column] = unpack(unpackStr, record[column])[0]
+                        # Right shifting the RDNtyp_col by 1 byte as it has additional
+                        # one byte padded at the end of the value.
                         if column == 'RDNtyp_col':
                             record[column] = record[column] >> 8
             
             if column == 'DNT_col':
+                # DNT_col specifies the distinguished name tag Id of the AD object.
                 dntId = record[column]
             elif column == 'PDNT_col':
+                # PDNT_col specifes the distinguished name tag Id of the parent of
+                # this AD object in the tree structure of AD.
                 pdntId = record[column]
             elif column == 'RDNtyp_col':
+                #RDNTyp_col = 3 indicates it is CN.
+                #RDNTyp_col = 11 indicates it is OU.
+                #RDNTyp_col = 1376281 indicates it is DC.
                 rdnTypeId = record[column]
             elif column  == 'ATTm589825':
+                # ATTm589825 specifies the name of the AD object
                 name = record[column]
 
-        #DNT ID = 1 , 2 are reserved for the $ROOT_OBJECT$ and $NOT_AN_OBJECT$.
+        #DNT ID = 2, 1 are reserved for the $ROOT_OBJECT$ and $NOT_AN_OBJECT$.
         #DNT ID = 0 is assigned at initialization.
         #RDNTyp_col = 3 indicates it is CN.
         #RDNTyp_col = 11 indicates it is OU.
         #RDNTyp_col = 1376281 indicates it is DC.
         # ATTj590126 is key for samAccountType in the record.
+
+        # The following block computes the Distingished name of the AD object.
+        # If the AD object is not a leaf level object, the distinguished name is
+        # computed and inserted in the __DNMap.
+        # Reference : http://blogs.chrisse.se/2012/02/15/how-the-active-directory-data-store-really-works-inside-ntds-dit-part-2/
         if not(dntId == 0 or dntId == 1 or dntId == 2):
             if rdnTypeId == 3 and name != "" and pdntId != 0 and  self.__DNMap[pdntId] is not None:
                 if record['ATTj590126'] is None:
                     self.__DNMap[dntId] = "CN="+name + "," + self.__DNMap[pdntId]
                 else:
+                    # These are the leaf level AD objects.
                     record['DN'] = "CN="+name + "," + self.__DNMap[pdntId]
             elif rdnTypeId == 11 and name != ""  and pdntId !=0 and self.__DNMap[pdntId] is not None:
+                record['DN'] = "OU="+name+","+self.__DNMap[pdntId]
                 self.__DNMap[dntId] = "OU="+name+","+self.__DNMap[pdntId]
             elif rdnTypeId == 1376281 and name != "" and pdntId != 2:
                 self.__DNMap[dntId] = "DC="+name+","+self.__DNMap[pdntId]
-            elif rdnTypeId == 1376281 and name != "" and pdntId == 2:   
-                self.__DNMap[dntId] = "DC="+name     
+            elif rdnTypeId == 1376281 and name != "" and pdntId == 2:
+                # First DC component in the Distingished name has PDNT as 2.
+                # Example: DC=ntdev,DC=corp,DC=chrisse,DC=com
+                # DC=com in the above example has PDNT as 2.
+                # As specified above, DNT = 2 indicates it is a root object.
+                self.__DNMap[dntId] = "DC="+name    
         return record
 
 
