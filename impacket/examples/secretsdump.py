@@ -77,7 +77,8 @@ class NTDSHashes:
         'supplementalCredentials':'ATTk589949',
         'pwdLastSet':'ATTq589920',
         'distinguishedName':'DN', #The DN is custom tag.
-        'displayName':'ATTm589825' #This is the name used as part of distinguished name.
+        'displayName':'ATTm589825', #This is the name used as part of distinguished name.
+        'email':'ATTm1376259'
     }
 
     INTERNAL_TO_NAME = dict((v,k) for k,v in NAME_TO_INTERNAL.iteritems())
@@ -181,6 +182,11 @@ class NTDSHashes:
                     attributeMap['dnName'] = distinguishedName
                 else:
                     return None, True
+                if record[self.NAME_TO_INTERNAL['email']] is not None:
+                    email = '%s' % record[self.NAME_TO_INTERNAL['email']]
+                    attributeMap['email'] = email
+                else:
+                    attributeMap['email'] = str('')
                 if distinguishedName.startswith('OU'):
                     objectType = 'ou'
                 else:

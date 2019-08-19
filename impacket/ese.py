@@ -894,7 +894,7 @@ class ESENT_DB:
                
         columns = cursor['TableData']['Columns']
         for column in columns.keys():
-            if column != 'ATTk589826' and column != 'ATTm590045' and column != 'ATTm3' and column != 'ATTj590126' and column != 'DNT_col' and column != 'PDNT_col' and column != 'ATTm589825' and column != 'RDNtyp_col':
+            if column != 'ATTk589826' and column != 'ATTm590045' and column != 'ATTm3' and column != 'ATTj590126' and column != 'DNT_col' and column != 'PDNT_col' and column != 'ATTm589825' and column != 'RDNtyp_col' and column != 'ATTm1376259':
                 continue
             columnRecord = columns[column]['Record']
 
@@ -992,7 +992,7 @@ class ESENT_DB:
                 # A multi value data, we won't decode it, just leave it this way
                 record[column] = record[column][0]
 
-            elif columnRecord['ColumnType'] == JET_coltypText or columnRecord['ColumnType'] == JET_coltypLongText: 
+            elif columnRecord['ColumnType'] == JET_coltypText or columnRecord['ColumnType'] == JET_coltypLongText:
                 # Let's handle strings
                 if record[column] is not None:
                     if columnRecord['CodePage'] not in StringCodePages:

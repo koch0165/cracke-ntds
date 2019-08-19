@@ -50,6 +50,7 @@ if __name__ == "__main__":
                 data.append(record['dnName'].strip().encode("utf-8"))
                 data.append(record['objectType'].strip().encode('utf-8'))
                 data.append(record['guid'].strip().encode("utf-8"))
+                data.append(record['email'].strip().encode("utf-8"))
                 LOG.debug(data)
                 writer.writerow(data)
                 numObjects = numObjects + 1
