@@ -22,6 +22,7 @@ if __name__ == "__main__":
     group.add_argument("--ntds", action="store", help="(local) ntds.dit file to parse")
     group.add_argument("--out", action="store", help="File to write user:hash to")
     group.add_argument("--samaccounttypes", action="store", help="Sam Account types that need to be parsed. This is a bit flag")
+    group.add_argument("--domain", action="store", help = "To filter out the objects not belonging to this domain name")
     args, unknown_args = parser.parse_known_args()
     sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout) 
 
@@ -35,7 +36,7 @@ if __name__ == "__main__":
     numObjects = 0
     myFile = open(args.out, 'w')
     with myFile:
-        myFields = ['name', 'sam_account_name', 'distinguished_name', 'object_type', 'guid']
+        myFields = ['name', 'sam_account_name', 'distinguished_name', 'object_type', 'guid', 'email']
         writer = csv.writer(myFile)
         while True:
             record, hasNextRecord = ntdshashes.getNextRecord()
@@ -47,6 +48,14 @@ if __name__ == "__main__":
             try:
                 data.append(record['name'].strip().encode("utf-8"))
                 data.append(record['samAccountName'].strip().encode("utf-8"))
+                dnName = record['dnName'].strip().encode("utf-8")
+                # Constructing domain name from the distinguished name by
+                # replacing ',DC=' with '.'
+                # Adding this to filter out the AD objects that do not belong to
+                # this AD domain.
+                domain = dnName[dnName.index(",DC=")+4:].replace(",DC=",".")
+                if domain != args.domain:
+                  continue
                 data.append(record['dnName'].strip().encode("utf-8"))
                 data.append(record['objectType'].strip().encode('utf-8'))
                 data.append(record['guid'].strip().encode("utf-8"))
